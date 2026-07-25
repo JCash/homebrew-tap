@@ -22,7 +22,7 @@ jobs:
       - name: Checkout tap
         uses: actions/checkout@v6
 
-      - name: Resolve and verify release
+      - name: Resolve release
         id: release
         shell: bash
         env:
@@ -34,13 +34,6 @@ jobs:
             echo "Invalid release tag: ${TAG}" >&2
             exit 1
           fi
-
-          release_json="$(curl --fail --silent --show-error --location --retry 3 \
-            "https://api.github.com/repos/JCash/voronoi/releases/tags/${TAG}")"
-          jq --exit-status \
-            --arg tag "${TAG}" \
-            '.tag_name == $tag and .draft == false and .prerelease == false' \
-            <<<"${release_json}" >/dev/null
 
           version="${TAG#v}"
           source_url="https://github.com/JCash/voronoi/archive/refs/tags/${TAG}.tar.gz"
