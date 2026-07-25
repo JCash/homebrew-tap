@@ -1,8 +1,8 @@
 class JcVoronoi < Formula
   desc "Fast C header-only library for creating 2D Voronoi diagrams"
   homepage "https://github.com/JCash/voronoi"
-  url "https://github.com/JCash/voronoi/archive/refs/tags/v0.10.0.tar.gz"
-  sha256 "ce4c00b8f51933ea1bc04f4f8ca720981e316b406a41cbe7cb2ebdea7398d126"
+  url "https://github.com/JCash/voronoi/archive/refs/tags/v0.10.1.tar.gz"
+  sha256 "c1954f9818d03f593b916d5a117bf8ba45b0ee60de26be908558c44a2677520e"
   license "MIT"
 
   def install
