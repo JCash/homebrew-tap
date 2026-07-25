@@ -19,6 +19,10 @@ if current_version && Gem::Version.new(version) < Gem::Version.new(current_versi
   abort "refusing to downgrade #{current_version} to #{version}"
 end
 
+if current_version && Gem::Version.new(version) > Gem::Version.new(current_version)
+  contents.sub!(/^  revision \d+\n/, "")
+end
+
 url_lines = contents.scan(/^  url ".*"$/)
 checksum_lines = contents.scan(/^  sha256 ".*"$/)
 abort "expected one url line" unless url_lines.length == 1

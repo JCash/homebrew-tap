@@ -1,15 +1,32 @@
 class JcVoronoi < Formula
   desc "Fast C header-only library for creating 2D Voronoi diagrams"
-  homepage "https://github.com/JCash/voronoi"
+  homepage "https://jcash.github.io/voronoi/"
   url "https://github.com/JCash/voronoi/archive/refs/tags/v0.10.1.tar.gz"
   sha256 "c1954f9818d03f593b916d5a117bf8ba45b0ee60de26be908558c44a2677520e"
   license "MIT"
+  revision 1
+
+  depends_on "cmake" => :build
 
   def install
-    include.install "src/jc_voronoi.h", "src/jc_voronoi_clip.h"
+    # v0.10.1 predates JC_VORONOI_VERSION, so normalize its project version here.
+    if version.to_s == "0.10.1"
+      inreplace "CMakeLists.txt", /project\(jc_voronoi VERSION [^)]+ LANGUAGES C\)/,
+                "project(jc_voronoi VERSION #{version} LANGUAGES C)"
+    end
+
+    system "cmake", "-S", ".", "-B", "build", "-DJC_VORONOI_VERSION=#{version}", *std_cmake_args
+    system "cmake", "--build", "build"
+    system "cmake", "--install", "build"
   end
 
   test do
+    cmake_package = lib/"cmake/jc_voronoi"
+    assert_path_exists cmake_package/"jc_voronoiConfig.cmake"
+    assert_path_exists cmake_package/"jc_voronoiConfigVersion.cmake"
+    assert_path_exists cmake_package/"jc_voronoiTargets.cmake"
+    assert_match version.to_s, (cmake_package/"jc_voronoiConfigVersion.cmake").read
+
     (testpath/"test.c").write <<~C
       #define JC_VORONOI_IMPLEMENTATION
       #include <jc_voronoi.h>
