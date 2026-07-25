@@ -1,0 +1,125 @@
+name: Publish jc-voronoi formula
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published JCash/voronoi release tag
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-jc-voronoi
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v6
+
+      - name: Resolve and verify release
+        id: release
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${TAG}" =~ ^v[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "Invalid release tag: ${TAG}" >&2
+            exit 1
+          fi
+
+          release_json="$(curl --fail --silent --show-error --location --retry 3 \
+            "https://api.github.com/repos/JCash/voronoi/releases/tags/${TAG}")"
+          jq --exit-status \
+            --arg tag "${TAG}" \
+            '.tag_name == $tag and .draft == false and .prerelease == false' \
+            <<<"${release_json}" >/dev/null
+
+          version="${TAG#v}"
+          source_url="https://github.com/JCash/voronoi/archive/refs/tags/${TAG}.tar.gz"
+          archive="jc-voronoi-${version}.tar.gz"
+
+          {
+            echo "version=${version}"
+            echo "source_url=${source_url}"
+            echo "archive=${archive}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Download and verify tagged source
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          SOURCE_URL: ${{ steps.release.outputs.source_url }}
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "${ARCHIVE}" \
+            "${SOURCE_URL}"
+
+          mkdir source
+          tar -xzf "${ARCHIVE}" -C source --strip-components=1
+          test -f source/LICENSE
+          test -f source/src/jc_voronoi.h
+          test -f source/src/jc_voronoi_clip.h
+
+      - name: Update formula
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          SOURCE_URL: ${{ steps.release.outputs.source_url }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          checksum="$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')"
+          ruby .github/scripts/update-formula.rb \
+            Formula/jc-voronoi.rb \
+            "${TAG}" \
+            "${SOURCE_URL}" \
+            "${checksum}"
+          ruby -c Formula/jc-voronoi.rb
+
+      - name: Commit formula locally
+        id: commit
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/jc-voronoi.rb
+
+          if git diff --cached --quiet; then
+            echo "Formula is already current."
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            git commit -m "jc-voronoi ${VERSION}"
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Audit and test formula
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          brew tap --custom-remote JCash/tap "${GITHUB_WORKSPACE}"
+          brew trust --formula JCash/tap/jc-voronoi
+          brew style JCash/tap
+          brew audit --strict --online JCash/tap/jc-voronoi
+          brew install --build-from-source JCash/tap/jc-voronoi
+          brew test JCash/tap/jc-voronoi
+
+      - name: Push formula
+        if: steps.commit.outputs.changed == 'true'
+        run: git push
